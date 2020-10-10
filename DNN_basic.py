@@ -18,7 +18,7 @@ LAYERS_DIMS = []  # [12288, 20, 7, 5, 1] example of 4 layer model, 3 hidden + ou
 
 def sigmoid(Z):
     """
-    Implements the sigmoid activation function, vectorized version for all units in a layer (array Z).
+    Implements the sigmoid activation function, vectorized version (array Z).
     
     Params:
     :Z: numpy array of any shape, output of the linear layer
@@ -39,7 +39,7 @@ def sigmoid(Z):
 
 def relu(Z):
     """
-    Implements the ReLU activation function, vectorized version for all units in a layer (array Z).
+    Implements the ReLU activation function, vectorized version (array Z).
 
     Params:
     :Z: numpy array of any shape, output of the linear layer
@@ -60,7 +60,7 @@ def relu(Z):
 
 def sigmoid_backward(dA, cache):
     """
-    Implements the backward propagation for SIGMOID activation function, (vectorized version) for all units in a layer.
+    Implements the backward propagation for SIGMOID activation function, vectorized version.
 
     Params:
     :dA: post-activation gradient, numpy array of any shape
@@ -83,7 +83,7 @@ def sigmoid_backward(dA, cache):
 
 def relu_backward(dA, cache):
     """
-    Implements the backward propagation for ReLU activation function, (vectorized version) for all units in a layer.
+    Implements the backward propagation for ReLU activation function, vectorized version.
 
     Params:
     :dA: post-activation gradient, numpy array of any shape
@@ -106,7 +106,7 @@ def relu_backward(dA, cache):
 
 def initialize_parameters(layer_dims):
     """
-    Initialize weight matrices and bias vectors for all layers of a network.
+    Initialize weight matrices and bias vectors.
     
     Params:
     :layer_dims: python array (list) containing the dimensions (# of units) 

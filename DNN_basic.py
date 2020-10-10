@@ -37,18 +37,15 @@ def initialize_parameters(layers_dims):
                 bl -- bias vector of shape (layers_dims[l], 1)
 
     """
-    
     np.random.seed(SEED_VALUE)
-    
+    L = len(layers_dims)  # number of layers in the network + input layer
     parameters = {}
-    L = len(layers_dims)  # number of layers in the network
 
-    for layer in range(1, L):
-        parameters['W' + str(layer)] = np.random.randn(layers_dims[layer], layers_dims[layer - 1]) * 0.01
-        parameters['b' + str(layer)] = np.zeros((layers_dims[layer], 1))
-        
-        assert(parameters['W' + str(layer)].shape == (layers_dims[layer], layers_dims[layer - 1]))
-        assert(parameters['b' + str(layer)].shape == (layers_dims[layer], 1))
+    for lyr in range(1, L):
+        parameters['W' + str(lyr)] = np.random.randn(layers_dims[lyr], layers_dims[lyr - 1]) * 0.01
+        parameters['b' + str(lyr)] = np.zeros((layers_dims[lyr], 1))
+        assert(parameters['W' + str(lyr)].shape == (layers_dims[lyr], layers_dims[lyr - 1]))
+        assert(parameters['b' + str(lyr)].shape == (layers_dims[lyr], 1))
         
     return parameters
 
@@ -64,17 +61,14 @@ def linear_forward(A, W, b):
 
     Returns:
     :Z: the input of the activation function, pre-activation parameter 
-    :cache: a Python tuple containing "A", "W" and "b" ; stored for computing the backward pass efficiently
+    :(A, W, b): a tuple to be stored as cache for computing the backward pass efficiently
 
     """
-    
     Z = np.dot(W, A) + b
-    
-    assert(Z.shape == (W.shape[0], A.shape[1]))
 
-    cache = (A, W, b)
+    assert(Z.shape == (W.shape[0], A.shape[1]))
     
-    return Z, cache
+    return Z, (A, W, b)
 
 
 def sigmoid(Z):
@@ -86,16 +80,14 @@ def sigmoid(Z):
     
     Returns:
     :A: post-activation output of sigmoid(z), same shape as Z
-    :cache: cached Z needed for backpropagation
+    :Z: to be stored as cache needed for backpropagation
 
     """
-
     A = 1/(1+np.exp(-Z))
-    cache = Z
 
     assert(A.shape == Z.shape)
 
-    return A, cache
+    return A, Z
 
 
 def relu(Z):
@@ -107,16 +99,13 @@ def relu(Z):
 
     Returns:
     :A: post-activation output of relu(Z), of the same shape as Z
-    :cache: cached Z needed for backpropagation
+    :Z: to be stored as cache needed for backpropagation
 
     """
-
     A = np.maximum(0, Z)
-    cache = Z
-
     assert(A.shape == Z.shape)
 
-    return A, cache
+    return A, Z
 
 
 def linear_activation_forward(A_prev, W, b, activation):
@@ -132,11 +121,10 @@ def linear_activation_forward(A_prev, W, b, activation):
 
     Returns:
     :A: the output of the activation function, post-activation value 
-    :cache: a Python tuple containing linear cache and activation cache stored for computing the backward pass
-            efficiently
+    :(linear_cache, activation_cache): tuple containing linear cache and activation cache stored for computing the
+                                    backward pass efficiently
 
     """
-
     Z, A, linear_cache, activation_cache = None, None, None, None
 
     # non-implemented activation function
@@ -148,12 +136,10 @@ def linear_activation_forward(A_prev, W, b, activation):
     elif activation == "relu":
         Z, linear_cache = linear_forward(A_prev, W, b)
         A, activation_cache = relu(Z)
-    
+
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
 
-    cache = (linear_cache, activation_cache)
-
-    return A, cache
+    return A, (linear_cache, activation_cache)
 
 
 def L_model_forward(X, parameters, activations):
@@ -168,24 +154,22 @@ def L_model_forward(X, parameters, activations):
     Returns:
     :AL: last post-activation value (from the output layer, prediction probability)
     :caches: list of caches containing every cache of linear_activation_forward() (L-1 of them, indexed from 0 to L-1)
-    
-    """
 
+    """
     caches = []
-    A = X
     L = len(parameters)  # number of layers in the network
-    
+    A = X
+
     # forward propagation for L-1 layers and add "cache" to the "caches" list
     for l in range(1, L):
         A_prev = A 
-        A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)], parameters['b' + str(l)],
-                                             activations[l])
+        A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)], parameters['b' + str(l)], activations[l])
         caches.append(cache)
     
     # forward propagation for output layer and add "cache" to the "caches" list.
     AL, cache = linear_activation_forward(A, parameters['W' + str(L)], parameters['b' + str(L)], activations[L])
     caches.append(cache)
-    
+
     assert(AL.shape == (1, X.shape[1]))
     
     return AL, caches
@@ -205,23 +189,20 @@ def compute_cost(AL, Y, activation):
     :cost: cross-entropy cost
     
     """
-
     cost = None
-
-    # non-implemented activation function
-    assert (activation in ACTIVATION_FUNCTIONS)
-
     m = Y.shape[1]
+
+    # currently only sigmoid implemented
+    assert (activation == 'sigmoid')
 
     # compute loss from AL and Y
     if activation == 'sigmoid':
         cost = - np.sum(np.multiply(Y, np.log(AL)) + np.multiply((1 - Y), np.log(1 - AL))) / m
     
-    cost = np.squeeze(cost)  # to make sure cost's shape is as expected (fow example, this turns [[17]] into 17).
-    
+    cost = np.squeeze(cost)  # to make sure cost's shape is as expected
     assert(cost.shape == ())
     
-    return float(cost)
+    return cost
 
 
 def linear_backward(dZ, cache):
@@ -238,14 +219,13 @@ def linear_backward(dZ, cache):
     :db: gradient of the cost with respect to b (current layer l), same shape as b
     
     """
-    
     A_prev, W, b = cache
     m = A_prev.shape[1]
 
     dW = np.dot(dZ, A_prev.T) / m
     db = np.sum(dZ, axis=1, keepdims=True) / m
     dA_prev = np.dot(W.T, dZ)
-    
+
     assert (dA_prev.shape == A_prev.shape)
     assert (dW.shape == W.shape)
     assert (db.shape == b.shape)
@@ -253,21 +233,18 @@ def linear_backward(dZ, cache):
     return dA_prev, dW, db
 
 
-def sigmoid_backward(dA, cache):
+def sigmoid_backward(dA, Z):
     """
     Backward propagation for SIGMOID activation function, vectorized version.
 
     Params:
     :dA: post-activation gradient, numpy array of any shape
-    :cache: Z stored earlier for computing backward propagation efficiently
+    :Z: stored earlier as cache for computing backward propagation efficiently
 
     Returns:
     :dZ: gradient of the cost function with respect to Z
     
     """
-    
-    Z = cache
-    
     s = 1/(1+np.exp(-Z))
     dZ = dA * s * (1-s)
     
@@ -276,22 +253,19 @@ def sigmoid_backward(dA, cache):
     return dZ
 
 
-def relu_backward(dA, cache):
+def relu_backward(dA, Z):
     """
     Backward propagation for ReLU activation function, vectorized version.
 
     Params:
     :dA: post-activation gradient, numpy array of any shape
-    :cache: Z stored earlier for computing backward propagation efficiently
+    :Z: stored earlier for computing backward propagation efficiently
 
     Returns:
     :dZ: gradient of the cost function with respect to Z
     
     """
-    
-    Z = cache
-
-    dZ = np.array(dA, copy=True)    
+    dZ = np.array(dA, copy=True)
     dZ[Z <= 0] = 0
     
     assert (dZ.shape == Z.shape)
@@ -314,11 +288,11 @@ def linear_activation_backward(dA, cache, activation):
     :db: gradient of the cost with respect to b (current layer l), same shape as b
     
     """
-
     dA_prev, dW, db = None, None, None
 
-    # non-implemented activation function
-    assert (activation in ACTIVATION_FUNCTIONS)
+    # non-implemented activation function (softmax, once implemented will have separate function because the algorithm
+    # is different)
+    assert (activation in [f for f in ACTIVATION_FUNCTIONS if f != 'softmax'])
 
     linear_cache, activation_cache = cache
     
@@ -346,37 +320,23 @@ def L_model_backward(AL, Y, caches, activations):
 
     Returns:
     :grads: a dictionary with the gradients
-             grads["dA" + str(l)] = ... 
-             grads["dW" + str(l)] = ...
-             grads["db" + str(l)] = ... 
-    
+
     """
-    
     grads = {}
-    
-    L = len(caches)  # the number of layers
     Y = Y.reshape(AL.shape)
-    
-    # Initializing the backpropagation, currently only SIGMOID implemented
+    L = len(caches)  # the number of layers in the network
+
+    # initializing the backpropagation (currently SIGMOID only)
+    assert (activations[L] == 'sigmoid')
     dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
-    # Lth layer (SIGMOID -> LINEAR) gradients.
-    # Inputs: "dAL, current_cache". 
-    # Outputs: "grads["dAL-1"], grads["dWL"], grads["dbL"]
-    current_cache = caches[L-1]
     grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] \
-        = linear_activation_backward(dAL, current_cache, activations[L])
+        = linear_activation_backward(dAL, caches[L-1], activations[L])
     
-    # Loop from l=L-2 to l=0
-    for layer in reversed(range(L-1)):
-        # Inputs: "grads["dA" + str(layer + 1)], current_cache".
-        # Outputs: "grads["dA" + str(layer)], grads["dW" + str(layer + 1)], grads["db" + str(layer + 1)]
-        current_cache = caches[layer]
-        dA_prev_temp, dW_temp, db_temp = linear_activation_backward(grads["dA" + str(layer+1)], current_cache,
-                                                                    activations[layer])
-        grads["dA" + str(layer)] = dA_prev_temp
-        grads["dW" + str(layer + 1)] = dW_temp
-        grads["db" + str(layer + 1)] = db_temp
- 
+    # loop from l=L-1 to l=1
+    for lyr in reversed(range(1, L)):
+        grads["dA" + str(lyr-1)], grads["dW" + str(lyr)], grads["db" + str(lyr)] \
+            = linear_activation_backward(grads["dA" + str(lyr)], caches[lyr-1], activations[lyr])
+
     return grads
 
 
@@ -390,17 +350,14 @@ def update_parameters(parameters, grads, learning_rate):
     :learning_rate: model's learning rate
     
     Returns:
-    :parameters: Python dictionary containing updated parameters 
-                parameters["W" + str(l)] = ... 
-                parameters["b" + str(l)] = ...
-    
+    :parameters: dictionary containing updated parameters
+
     """
-    
     L = len(parameters)  # number of layers in the neural network
 
-    for layer in range(L):
-        parameters["W" + str(layer+1)] = parameters["W" + str(layer+1)] - learning_rate * grads["dW" + str(layer+1)]
-        parameters["b" + str(layer+1)] = parameters["b" + str(layer+1)] - learning_rate * grads["db" + str(layer+1)]
+    for lyr in range(1, L+1):
+        parameters["W" + str(lyr)] = parameters["W" + str(lyr)] - learning_rate * grads["dW" + str(lyr)]
+        parameters["b" + str(lyr)] = parameters["b" + str(lyr)] - learning_rate * grads["db" + str(lyr)]
     
     return parameters
 
@@ -465,7 +422,6 @@ def predict(X, parameters, activations, Y=None):
     :P: predictions for the given dataset X, shape 1 by number of examples
 
     """
-
     m = X.shape[1]
     P = np.zeros((1, m))
 

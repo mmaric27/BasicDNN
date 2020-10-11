@@ -1,66 +1,86 @@
 # Generic L-layer 'straight in Python' Deep Neural Network implementation using basic Python/numpy.
-# Mini-batches, regularization, optimization and batch normalization to be implemented.
 #
-# usage example:    params = L_layer_model(trainX, trainY, LAYERS, num_iterations=1500)
-#                   predictTrain = predict(trainX, params, activations, trainY)
-#                   predictDev = predict(devX, params, activations, devY)
-#                   predictTest = predict(testX, params, activations, testY)
+#Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example
+# and m is the number of training examples.
+#Output layer can be either Sigmoid or Softmax classifier.
+#Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
+#Implemented weights initialization methods: zeros, random, He, Xavier.
+#
+# usage example:    model = L_layer_model(trainX, trainY, MODEL, num_iterations=1500)
+#                   predictTrain = predict(trainX, model, trainY)
+#                   predictDev = predict(devX, model, devY)
+#                   predictTest = predict(testX, model, testY)
 
 # main package
 import numpy as np
 
 # currently implemented activation functions
 ACTIVATION_FUNCTIONS = ['sigmoid', 'relu', 'lrelu', 'tanh', 'softmax']
+# currently implemented wights initializations
+INITIALIZATIONS = ['zeros', 'random', 'xavier', 'he']
 
 # seed global variable
-SEED_VALUE = 3
+SEED_VALUE = 0
 
-# constant (Python dictionary) defining the model, layers dimensions and activation functions
-# {'dims': [12288, 20, 7, 5, 1], 'activations': [None, 'relu', 'relu', 'relu', 'sigmoid']} is
-# example of 4 layer model, 3 hidden layers with 20, 7, 5 units and relu activation function, and output layer
-# (one unit for sigmoid function); 12288 is the # of # input features (not a layer of a network and doesn't need
-# an activation function)
-LAYERS = {'dims': [], 'activations': []}
+# tuple defining the model (layers dimensions, activation functions and weights initialization method), for
+# instance ((20, 'relu', 'he'), (7, 'relu', 'he'), (5, 'relu', 'he'), (1, 'sigmoid', 'random')) is an example of 4 layer
+# model, 3 hidden layers with 20, 7, 5 units and relu activation function and he weights initialization, and output
+# layer with one unit, sigmoid function and random initialization
+MODEL = ()
 
 
-def initialize_parameters(layers_dims):
+def initialize_model(n_x, model):
     """
-    Initialize weight matrices and bias vectors.
+    Initialize model, its weight matrix, bias vector and activation functions.
     
-    Params:
-    :layers_dims: python array (list) containing the dimensions (# of units)
-                 of each layer in network
-    
+    Args:
+        n_x (integer): number of input features
+        model (tuple): network layer definitions, each element in a tuple is a tuple containing number of units in a
+                    layer, activation function and weights initialization method for a layer
+
     Returns:
-    :parameters: python dictionary containing parameters "W1", "b1", ..., "WL", "bL":
-                Wl -- weight matrix of shape (layers_dims[l], layers_dims[l-1])
-                bl -- bias vector of shape (layers_dims[l], 1)
+        M (list): network layer definitions, each element in a list is a list containing weight and bias parameters, and
+                activation function for a layer
 
     """
-    np.random.seed(SEED_VALUE)
-    L = len(layers_dims)  # number of layers in the network + input layer
-    parameters = {}
+    M = []
 
-    for lyr in range(1, L):
-        parameters['W' + str(lyr)] = np.random.randn(layers_dims[lyr], layers_dims[lyr - 1]) * 0.01
-        parameters['b' + str(lyr)] = np.zeros((layers_dims[lyr], 1))
-        assert(parameters['W' + str(lyr)].shape == (layers_dims[lyr], layers_dims[lyr - 1]))
-        assert(parameters['b' + str(lyr)].shape == (layers_dims[lyr], 1))
-        
-    return parameters
+    for layer_id in range(len(model)):
+        # initialization method
+        method = model[layer_id][2]
+        # number of units in a layer
+        n = model[layer_id][0]
+        # number of units in a previous layer
+        n_prev = model[layer_id-1][0] if layer_id > 0 else n_x
+
+        if method == 'zeros':
+            W = np.zeros((n, n_prev))
+        elif method == 'xavier':
+            W = np.random.randn(n, n_prev) * np.sqrt(1 / n_prev)
+        elif method == 'he':
+            W = np.random.randn(n, n_prev) * np.sqrt(2 / n_prev)
+        else:
+            W = np.random.randn(n, n_prev) * 0.01
+
+        b = np.zeros((n, 1))
+
+        M.append([W, b, model[layer_id][1]])
+
+    return M
 
 
 def linear_forward(A, W, b):
     """
     Linear part of a layer's forward propagation (wa + b), vectorized version.
 
-    Parameters:
-    :A: activations from previous layer (input data) of shape number of units of previous layer by number of examples
-    :W: weights matrix, numpy array of shape size (# of units) of current layer by size of previous layer
-    :b: bias vector, numpy array of shape size of the current layer by 1
+    Args:
+        A (ndarray): activations from previous layer (input data) of shape number of units of previous layer by number
+                    of examples
+        W (ndarray): weights matrix of shape size (# of units) of current layer by size of previous layer
+        b (ndarray): bias vector, numpy array of shape size of the current layer by 1
 
     Returns:
-    :Z: the input of the activation function, pre-activation parameter
+        Z (ndarray): the input of the activation function, pre-activation parameter
 
     """
     Z = np.dot(W, A) + b
@@ -74,11 +94,11 @@ def sigmoid(Z):
     """
     Sigmoid activation function, vectorized version (array Z).
     
-    Params:
-    :Z: numpy array of any shape, output of the linear layer
+    Args:
+        Z (ndarray): array of any shape, output of the linear layer
     
     Returns:
-    :A: post-activation output of sigmoid(z), same shape as Z
+        A (ndarray): post-activation output of sigmoid(z), same shape as Z
 
     """
     A = 1 / (1 + np.exp(-Z))
@@ -92,11 +112,11 @@ def relu(Z):
     """
     ReLU activation function, vectorized version (array Z).
 
-    Params:
-    :Z: numpy array of any shape, output of the linear layer
+    Args:
+        Z (ndarray): numpy array of any shape, output of the linear layer
 
     Returns:
-    :A: post-activation output of relu(Z), same shape as Z
+        A (ndarray): post-activation output of relu(Z), same shape as Z
 
     """
     A = np.maximum(0, Z)
@@ -110,11 +130,11 @@ def lrelu(Z, alpha=0.01):
     """
     Leaky ReLU activation function, vectorized version (array Z).
 
-    Params:
-    :Z: numpy array of any shape, output of the linear layer
+    Args:
+        Z (ndarray): numpy array of any shape, output of the linear layer
 
     Returns:
-    :A: post-activation output of lrelu(Z), same shape as Z
+        A (ndarray): post-activation output of lrelu(Z), same shape as Z
 
     """
     A = np.maximum(alpha * Z, Z)
@@ -128,11 +148,11 @@ def tanh(Z):
     """
     Tanh activation function, vectorized version (array Z).
 
-    Params:
-    :Z: numpy array of any shape, output of the linear layer
+    Args:
+        Z (ndarray): numpy array of any shape, output of the linear layer
 
     Returns:
-    :A: post-activation output of tanh(Z), same shape as Z
+        A (ndarray): post-activation output of tanh(Z), same shape as Z
 
     """
     A = (np.exp(Z) - np.exp(-Z)) / (np.exp(Z) + np.exp(-Z))
@@ -146,11 +166,11 @@ def softmax(Z):
     """
     Softmax activation function, vectorized version (array Z).
 
-    Params:
-    :Z: numpy array of any shape, output of the linear layer
+    Args:
+        Z (ndarray): numpy array of any shape, output of the linear layer
 
     Returns:
-    :A: post-activation output of softmax(Z), same shape as Z
+        A (ndarray): post-activation output of softmax(Z), same shape as Z
 
     """
     Z_exp = np.exp(Z - np.max(Z))
@@ -161,39 +181,39 @@ def softmax(Z):
     return A
 
 
-def linear_activation_forward(A_prev, W, b, activation):
+def linear_activation_forward(A_prev, W, b, g):
     """
     Forward propagation for the LINEAR->ACTIVATION layer.
 
-    Params:
-    :A_prev: activations from previous layer (or input data for the first layer) of shape size of previous layer by
-            number of examples
-    :W: weights matrix, numpy array of shape size of current layer by size of previous layer
-    :b: bias vector, numpy array of shape size of the current layer by 1
-    :activation: the activation function to be used in layer, stored as a text string
+    Args:
+        A_prev (ndarray): activations from previous layer (or input data for the first layer) of shape size of previous
+                        layer by number of examples
+        W (ndarray): weights matrix, numpy array of shape size of current layer by size of previous layer
+        b (ndarray): bias vector, numpy array of shape size of the current layer by 1
+        g (string): activation function to be used in layer
 
     Returns:
-    :A: the output of the activation function, post-activation value 
-    :(linear_cache, Z): tuple containing linear cache and pre-activation parameter to be stored for computing the
-                        backward pass efficiently
+        A (ndarray): the output of the activation function, post-activation value
+        linear_cache, Z (tuple): tuple containing linear cache and pre-activation parameter to be stored for computing
+                                the backward pass efficiently
 
     """
     A, linear_cache, activation_cache = None, None, None
 
     # non-implemented activation function
-    assert (activation in ACTIVATION_FUNCTIONS)
+    assert (g in ACTIVATION_FUNCTIONS)
 
     Z = linear_forward(A_prev, W, b)
 
-    if activation == "sigmoid":
+    if g == "sigmoid":
         A = sigmoid(Z)
-    elif activation == "relu":
+    elif g == "relu":
         A = relu(Z)
-    elif activation == "lrelu":
-        A = relu(Z)
-    elif activation == "tanh":
+    elif g == "lrelu":
+        A = lrelu(Z)
+    elif g == "tanh":
         A = tanh(Z)
-    elif activation == "softmax":
+    elif g == "softmax":
         A = softmax(Z)
 
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
@@ -201,28 +221,28 @@ def linear_activation_forward(A_prev, W, b, activation):
     return A, ((A_prev, W, b), Z)
 
 
-def L_model_forward(X, parameters, activations):
+def L_model_forward(X, M):
     """
     Forward propagation for the layers in a network.
     
-    Params:
-    :X: data, numpy array of shape input size (# of features) by number of examples
-    :parameters: output of initialize_parameters()
-    :activations: list of activation functions for layers
+    Args:
+        X (ndarray): data, array of shape input size (# of features) by number of examples
+        M (list): output of initialize_model()
 
     Returns:
-    :A: last post-activation value (from the output layer, prediction probability)
-    :caches: list of caches containing every cache of linear_activation_forward() (L-1 of them, indexed from 0 to L-1)
+        A (ndarray): last post-activation value (from the output layer, prediction probability)
+        caches (list): list of caches containing every cache of linear_activation_forward()
 
     """
     caches = []
-    L = len(parameters)  # number of layers in the network
+    L = len(M)  # number of layers in the network
     A = X
 
     # forward propagation for L layers and add "cache" to the "caches" list
-    for l in range(1, L+1):
-        A_prev = A 
-        A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)], parameters['b' + str(l)], activations[l])
+    for layer in range(L):
+        A_prev = A
+        W, b, g = M[layer]
+        A, cache = linear_activation_forward(A_prev, W, b, g)
         caches.append(cache)
 
     assert(A.shape == (1, X.shape[1]))
@@ -230,15 +250,14 @@ def L_model_forward(X, parameters, activations):
     return A, caches
 
 
-def compute_cost(AL, Y, activation):
+def compute_cost(AL, Y, g):
     """
-    Calculates the cost defined by equation -[y*log(y_hat)+(1-y)*log(1-y_hat)], so presuming output layer activation
-    function is sigmoid function.
+    Calculates the cost.
 
-    Params:
-    :AL: probability vector corresponding to "label" predictions, y_hat in the aforementioned function, shape 1 by
-        number of examples
-    :Y: true "label" vector (for example: containing 0 if non-cat, 1 if cat), shape 1 by number of examples
+    Args:
+        AL (ndarray): probability vector corresponding to "label" predictions (activations of last layer, returned by
+                    L_model_forward(), shape 1 by number of examples
+        Y (ndarray): true "label" vector (for example: containing 0 if non-cat, 1 if cat), shape 1 by number of examples
 
     Returns:
     :cost: cross-entropy cost
@@ -248,13 +267,13 @@ def compute_cost(AL, Y, activation):
     m = Y.shape[1]
 
     # only sigmoid or softmax
-    assert (activation in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
+    assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
 
     # compute loss from AL and Y
-    if activation == 'sigmoid':
+    if g == 'sigmoid':
         cost = - np.sum(np.multiply(Y, np.log(AL)) + np.multiply((1 - Y), np.log(1 - AL))) / m
-    elif activation == 'softmax':
-        cost = - np.sum(np.multiply(Y, np.log(AL))) / m
+    elif g == 'softmax':
+        cost = np.sum(-np.sum(np.multiply(Y, np.log(AL)), axis=0)) / m
 
     cost = np.squeeze(cost)  # to make sure cost's shape is as expected
     assert(cost.shape == ())
@@ -266,14 +285,15 @@ def linear_backward(dZ, cache):
     """
     Linear portion of backward propagation for a single layer (layer l).
 
-    Params:
-    :dZ: gradient of the cost with respect to the linear output (of current layer l)
-    :cache: tuple of values (A_prev, W, b) coming from the forward propagation in the current layer
+    Args:
+        dZ (ndarray): gradient of the cost with respect to the linear output (of current layer l)
+        cache (tuple): coming from the forward propagation in the current layer
 
     Returns:
-    :dA_prev: gradient of the cost with respect to the activation (of the previous layer l-1), same shape as A_prev
-    :dW: gradient of the cost with respect to W (current layer l), same shape as W
-    :db: gradient of the cost with respect to b (current layer l), same shape as b
+        dA_prev (ndarray): gradient of the cost with respect to the activation (of the previous layer l-1), same shape
+                        as A_prev
+        dW (ndarray): gradient of the cost with respect to W (current layer l), same shape as W
+        db (ndarray): gradient of the cost with respect to b (current layer l), same shape as b
     
     """
     A_prev, W, b = cache
@@ -294,12 +314,12 @@ def sigmoid_backward(dA, Z):
     """
     Backward propagation for SIGMOID activation function, vectorized version.
 
-    Params:
-    :dA: post-activation gradient, numpy array of any shape
-    :Z: pre-activation parameter stored in cache during forward propagation
+    Args:
+        dA (ndarray): post-activation gradient, numpy array of any shape
+        Z (ndarray): pre-activation parameter stored in cache during forward propagation
 
     Returns:
-    :dZ: gradient of the cost function with respect to Z
+        dZ (ndarray): gradient of the cost function with respect to Z
     
     """
     s = sigmoid(Z)
@@ -314,12 +334,12 @@ def relu_backward(dA, Z):
     """
     Backward propagation for ReLU activation function, vectorized version.
 
-    Params:
-    :dA: post-activation gradient, numpy array of any shape
-    :Z: pre-activation parameter stored in cache during forward propagation
+    Args:
+        dA (ndarray): post-activation gradient, numpy array of any shape
+        Z (ndarray): pre-activation parameter stored in cache during forward propagation
 
     Returns:
-    :dZ: gradient of the cost function with respect to Z
+        dZ (ndarray): gradient of the cost function with respect to Z
     
     """
     dZ = np.array(dA, copy=True)
@@ -334,12 +354,12 @@ def lrelu_backward(dA, Z, alpha=0.01):
     """
     Backward propagation for Leaky ReLU activation function, vectorized version.
 
-    Params:
-    :dA: post-activation gradient, numpy array of any shape
-    :Z: pre-activation parameter stored in cache during forward propagation
+    Args:
+        dA (ndarray): post-activation gradient, numpy array of any shape
+        Z (ndarray): pre-activation parameter stored in cache during forward propagation
 
     Returns:
-    :dZ: gradient of the cost function with respect to Z
+        dZ (ndarray): gradient of the cost function with respect to Z
 
     """
     dZ = np.array(dA, copy=True)
@@ -354,12 +374,12 @@ def tanh_backward(dA, Z):
     """
     Backward propagation for tanh activation function, vectorized version.
 
-    Params:
-    :dA: post-activation gradient, numpy array of any shape
-    :Z: pre-activation parameter stored in cache during forward propagation
+    Args:
+        dA (ndarray): post-activation gradient, numpy array of any shape
+        Z (ndarray): pre-activation parameter stored in cache during forward propagation
 
     Returns:
-    :dZ: gradient of the cost function with respect to Z
+        dZ (ndarray): gradient of the cost function with respect to Z
 
     """
     dZ = dA * (1 - np.power(tanh(Z), 2))
@@ -368,36 +388,35 @@ def tanh_backward(dA, Z):
     return dZ
 
 
-def linear_activation_backward(dA, cache, activation):
+def linear_activation_backward(dA, cache, g):
     """
     Backward propagation for the LINEAR->ACTIVATION layer.
     
-    Parameters:
-    :dA: post-activation gradient for current layer l 
-    :cache: tuple of values (linear_cache, activation_cache) stored for computing backward propagation efficiently
-    :activation: the activation to be used in this layer, stored as a text string: "sigmoid" or "relu"
+    Args:
+        dA (ndarray): post-activation gradient for current layer l
+        cache (tuple): (linear_cache, activation_cache) stored for computing backward propagation efficiently
+        g (string): the activation to be used in this layer
     
     Returns:
-    :dA_prev: gradient of the cost with respect to the activation (of the previous layer l-1), same shape as A_prev
-    :dW: gradient of the cost with respect to W (current layer l), same shape as W
-    :db: gradient of the cost with respect to b (current layer l), same shape as b
+        dA_prev (ndarray): gradient of the cost with respect to the activation of the previous layer, same shape as A_prev
+        dW (ndarray): gradient of the cost with respect to W of current layer, same shape as W
+        db (ndarray): gradient of the cost with respect to b of the current layer, same shape as b
     
     """
     dZ, dA_prev, dW, db = None, None, None, None
 
-    # non-implemented activation function (softmax has a different algorithm, usually used only in output layer)
-    # is different)
-    assert (activation in [f for f in ACTIVATION_FUNCTIONS if f != 'softmax'])
+    # non-implemented activation function (softmax has a different algorithm, presumably used only in output layer)
+    assert (g in [f for f in ACTIVATION_FUNCTIONS if f != 'softmax'])
 
     linear_cache, Z = cache
     
-    if activation == "sigmoid":
+    if g == "sigmoid":
         dZ = sigmoid_backward(dA, Z)
-    elif activation == "relu":
+    elif g == "relu":
         dZ = relu_backward(dA, Z)
-    elif activation == "lrelu":
+    elif g == "lrelu":
         dZ = lrelu_backward(dA, Z)
-    elif activation == 'tanh':
+    elif g == 'tanh':
         dZ = tanh_backward(dA, Z)
 
     dA_prev, dW, db = linear_backward(dZ, linear_cache)
@@ -405,18 +424,18 @@ def linear_activation_backward(dA, cache, activation):
     return dA_prev, dW, db
 
 
-def L_model_backward(AL, Y, caches, activations):
+def L_model_backward(AL, Y, caches, G):
     """
     Backward propagation for the model.
     
-    Params:
-    :AL: probability vector, output of the forward propagation L_model_forward()
-    :Y: true "label" vector (for example containing 0 if non-cat, 1 if cat)
-    :caches: list of caches (linear and activation)
-    :activations: list of activation functions for the model
+    Args:
+        AL (ndarray): probability vector, output of the forward propagation L_model_forward()
+        Y (ndarray): true "label" vector (for example containing 0 if non-cat, 1 if cat)
+        caches (list): list of caches (linear and activation) returned from the L_model_forward()
+        G (list): list of activation functions for the model
 
     Returns:
-    :grads: a dictionary with the gradients
+        grads (dict): a dictionary with the gradients
 
     """
     grads = {}
@@ -424,122 +443,115 @@ def L_model_backward(AL, Y, caches, activations):
     L = len(caches)  # the number of layers in the network
 
     # initializing the backpropagation (output layer must be either sigmoid or softmax)
-    assert (activations[L] in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
-    if activations[L] == 'sigmoid':
+    assert (G[L] in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
+    if G[L] == 'sigmoid':
         dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
         grads["dA" + str(L - 1)], grads["dW" + str(L)], grads["db" + str(L)] \
-            = linear_activation_backward(dAL, caches[L - 1], activations[L])
-    elif activations[L] == 'softmax':
+            = linear_activation_backward(dAL, caches[L - 1], G[L])
+    elif G[L] == 'softmax':
         dZL = AL - Y
         grads["dA" + str(L - 1)], grads["dW" + str(L)], grads["db" + str(L)] \
             = linear_backward(dZL, caches[L-1][0])
 
     # loop from l=L-1 to l=1
-    for lyr in reversed(range(1, L)):
-        grads["dA" + str(lyr-1)], grads["dW" + str(lyr)], grads["db" + str(lyr)] \
-            = linear_activation_backward(grads["dA" + str(lyr)], caches[lyr-1], activations[lyr])
+    for layer in reversed(range(1, L)):
+        grads["dA" + str(layer-1)], grads["dW" + str(layer)], grads["db" + str(layer)] \
+            = linear_activation_backward(grads["dA" + str(layer)], caches[layer-1], G[layer])
 
     return grads
 
 
-def update_parameters(parameters, grads, learning_rate):
+def update_model(M, grads, learning_rate):
     """
-    Update parameters using gradient descent.
+    Update model parameters using gradient descent.
     
-    Params:
-    :parameters: Python dictionary containing weights and bias parameters 
-    :grads: Python dictionary containing gradients, output of L_model_backward
-    :learning_rate: model's learning rate
-    
-    Returns:
-    :parameters: dictionary containing updated parameters
+    Args:
+        M (list): list containing weights and bias parameters, and activation functions for all layers in a network
+        grads (dict): dictionary containing gradients, output of L_model_backward()
+        learning_rate (float): model's learning rate
 
     """
-    L = len(parameters)  # number of layers in the neural network
+    L = len(M)  # number of layers in the neural network
 
-    for lyr in range(1, L+1):
-        parameters["W" + str(lyr)] = parameters["W" + str(lyr)] - learning_rate * grads["dW" + str(lyr)]
-        parameters["b" + str(lyr)] = parameters["b" + str(lyr)] - learning_rate * grads["db" + str(lyr)]
-    
-    return parameters
+    for layer_id in range(L):
+        M[layer_id][0] = M[layer_id][0] - learning_rate * grads["dW" + str(layer_id+1)]
+        M[layer_id][1] = M[layer_id][1] - learning_rate * grads["db" + str(layer_id+1)]
 
 
-def L_layer_model(X, Y, layers, learning_rate=0.0075, num_iterations=3000, print_cost=False):
+def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, print_cost=False):
     """
     A L-layer neural network.
 
-    Params:
-    :X: data, numpy array of shape n_x (number of features) by m (number of examples)
-    :Y: true "label" vector (for example containing 0 if cat, 1 if non-cat) of shape 1 by number of examples
-    :layers_dims: list containing the input size and each layer size, of length number of layers + 1
-    :learning_rate: learning rate of the gradient descent update rule
-    :num_iterations: number of iterations of the optimization loop
-    :print_cost: if True, it prints the cost at every 100 steps
+    Args:
+        X (ndarray): data, numpy array of shape n_x (number of features) by m (number of examples)
+        Y (ndarray): true "label" vector (for example containing 0 if cat, 1 if non-cat) of shape 1 by number of examples
+        model (tuple): tuple containing model definitions (each element is a tuple containing number of units, activation
+                    function and weights initialization method for the layer)
+        learning_rate (float): learning rate of the gradient descent update rule
+        num_iterations (int): number of iterations of the optimization loop
+        print_cost (bool): if True, it prints the cost at every 100 steps
 
     Returns:
-    :parameters: parameters learnt by the model (used to predict)
+        M (list): list defining the model (each element representing a layer with its learned weights and bias
+                parameters, and activation functions) to be used for prediction
 
     """
-
-    # model layers not defined properly
-    assert (len(layers['dims']) == len(layers['activations']))
 
     np.random.seed(SEED_VALUE)
 
     costs = []  # keep track of cost
 
-    # parameters initialization
-    parameters = initialize_parameters(layers['dims'])
+    # model initialization
+    M = initialize_model(X.shape[0], model)
 
     # loop gradient descent
     for i in range(0, num_iterations):
         # forward propagation
-        AL, caches = L_model_forward(X, parameters, layers['activations'])
+        AL, caches = L_model_forward(X, M)
         # compute cost
-        cost = compute_cost(AL, Y, layers['activations'][-1])
+        cost = compute_cost(AL, Y, M[-1][2])
         # backward propagation
-        grads = L_model_backward(AL, Y, caches, layers['activations'])
-        # update parameters
-        parameters = update_parameters(parameters, grads, learning_rate)
+        grads = L_model_backward(AL, Y, caches, [activation for W, b, activation in M])
+        # update model
+        update_model(M, grads, learning_rate)
 
         # print the cost every 100 training example
         if print_cost and i % 100 == 0:
             print("Cost after iteration %i: %f" % (i, float(cost)))
             costs.append(cost)
 
-    return parameters
+    return M
 
 
-def predict(X, parameters, activations, Y=None):
+def predict(X, M, Y=None):
     """
     Function used to predict the results of a L-layer neural network.
 
-    Params:
-    :X: data set of examples to label, numpy array of shape n_x (number of features) by m (number of examples)
-    :parameters: parameters of the trained model, returned by L_layer_model()
-    :activations: list of activation functions for the model
-    :Y: if given, true "label" vector of shape 1 by number of examples to print the accuracy
+    Args:
+        X (ndarray): data set of examples to label, numpy array of shape n_x (number of features) by m (number of examples)
+        M (list): definition of the trained model, returned by L_layer_model()
+        Y (ndarray): if given, true "label" vector of shape 1 by number of examples to print the accuracy
 
     Returns:
-    :P: predictions for the given dataset X, shape 1 by number of examples
+        P (ndarray): predictions for the given dataset X, shape 1 for sigmoid activated output layer or number of classes
+                    for softmax classifier by number of examples
 
     """
-    m = X.shape[1]
-    P = np.zeros((1, m))
-
     # forward propagation
-    probabilities, _ = L_model_forward(X, parameters, activations)
+    probabilities, _ = L_model_forward(X, M)
 
-    # convert probabilities to 0/1 predictions
-    # currently for sigmoid in output layer only
-    assert (activations[-1] == 'sigmoid')
-    for i in range(0, probabilities.shape[1]):
-        if probabilities[0, i] > 0.5:
-            P[0, i] = 1
-        else:
-            P[0, i] = 0
+    # activation function of the output layer
+    g = M[-1][2]
+    # only sigmoid and softmax implemented as activation function for the output layer
+    assert ([f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
+
+    if g == 'softmax':
+        # convert probabilities into classes for all examples
+        P = np.argmax(probabilities, axis=0)
+    else:
+        P = np.where(probabilities > 0.5, 1, 0)
 
     if Y is not None:
-        print("Accuracy: " + str(np.sum((P == Y) / m)))
+        print("Accuracy: " + str(np.mean(P == Y)))
 
     return P

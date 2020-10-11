@@ -8,7 +8,7 @@ Generic L-layer 'straight in Python' Deep Neural Network implementation using ba
 * Implemented weights initialization methods: zeros, random, He, Xavier.
 
 * Usage example (4 layer model with 3 hidden layers with 20, 7, 5 units and relu activation function and He weights initialization, and output
-layer with one unit, sigmoid function and random initialization: 
+layer with one unit, sigmoid function and random initialization): 
 	- MODEL = ((20, 'relu', 'he'), (7, 'relu', 'he'), (5, 'relu', 'he'), (1, 'sigmoid', 'random'))
 	- model = L_layer_model(trainX, trainY, MODEL, num_iterations=1500)
 	- predictTrain = predict(trainX, MODEL, trainY)

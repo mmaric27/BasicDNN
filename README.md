@@ -11,9 +11,9 @@ Generic L-layer 'straight in Python' Deep Neural Network implementation using ba
 layer with one unit, sigmoid function and random initialization): 
 	- MODEL = ((20, 'relu', 'he'), (7, 'relu', 'he'), (5, 'relu', 'he'), (1, 'sigmoid', 'random'))
 	- model = L_layer_model(trainX, trainY, MODEL, num_iterations=1500)
-	- predictTrain = predict(trainX, MODEL, trainY)
-	- predictDev = predict(devX, MODEL, devY)
-	- predictTest = predict(testX, MODEL, testY) 
+	- predictTrain = predict(trainX, model, trainY)
+	- predictDev = predict(devX, model, devY)
+	- predictTest = predict(testX, model, testY) 
 
 * Mini-batches, regularization, optimizations and batch normalization to be implemented.
 

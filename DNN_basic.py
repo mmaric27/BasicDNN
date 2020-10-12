@@ -267,7 +267,7 @@ def compute_cost(AL, Y, g):
     m = Y.shape[1]
 
     # only sigmoid or softmax
-    assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
+    assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ('sigmoid', 'softmax')])
 
     # compute loss from AL and Y
     if g == 'sigmoid':
@@ -543,7 +543,7 @@ def predict(X, M, Y=None):
     # activation function of the output layer
     g = M[-1][2]
     # only sigmoid and softmax implemented as activation function for the output layer
-    assert ([f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
+    assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ('sigmoid', 'softmax')])
 
     if g == 'softmax':
         # convert probabilities into classes for all examples

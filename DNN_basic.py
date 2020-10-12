@@ -15,9 +15,9 @@
 import numpy as np
 
 # currently implemented activation functions
-ACTIVATION_FUNCTIONS = ['sigmoid', 'relu', 'lrelu', 'tanh', 'softmax']
+ACTIVATION_FUNCTIONS = ('sigmoid', 'relu', 'lrelu', 'tanh', 'softmax')
 # currently implemented wights initializations
-INITIALIZATIONS = ['zeros', 'random', 'xavier', 'he']
+INITIALIZATIONS = ('zeros', 'random', 'xavier', 'he')
 
 # seed global variable
 SEED_VALUE = 0
@@ -205,16 +205,7 @@ def linear_activation_forward(A_prev, W, b, g):
 
     Z = linear_forward(A_prev, W, b)
 
-    if g == "sigmoid":
-        A = sigmoid(Z)
-    elif g == "relu":
-        A = relu(Z)
-    elif g == "lrelu":
-        A = lrelu(Z)
-    elif g == "tanh":
-        A = tanh(Z)
-    elif g == "softmax":
-        A = softmax(Z)
+    A = eval(g)(Z)
 
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
 
@@ -235,11 +226,10 @@ def L_model_forward(X, M):
 
     """
     caches = []
-    L = len(M)  # number of layers in the network
     A = X
 
     # forward propagation for L layers and add "cache" to the "caches" list
-    for layer in range(L):
+    for layer in range(len(M)):
         A_prev = A
         W, b, g = M[layer]
         A, cache = linear_activation_forward(A_prev, W, b, g)
@@ -405,19 +395,12 @@ def linear_activation_backward(dA, cache, g):
     """
     dZ, dA_prev, dW, db = None, None, None, None
 
+    linear_cache, Z = cache
+    
     # non-implemented activation function (softmax has a different algorithm, presumably used only in output layer)
     assert (g in [f for f in ACTIVATION_FUNCTIONS if f != 'softmax'])
 
-    linear_cache, Z = cache
-    
-    if g == "sigmoid":
-        dZ = sigmoid_backward(dA, Z)
-    elif g == "relu":
-        dZ = relu_backward(dA, Z)
-    elif g == "lrelu":
-        dZ = lrelu_backward(dA, Z)
-    elif g == 'tanh':
-        dZ = tanh_backward(dA, Z)
+    dZ = eval(g + '_backward')(Z)
 
     dA_prev, dW, db = linear_backward(dZ, linear_cache)
 
@@ -442,21 +425,23 @@ def L_model_backward(AL, Y, caches, G):
     Y = Y.reshape(AL.shape)
     L = len(caches)  # the number of layers in the network
 
-    # initializing the backpropagation (output layer must be either sigmoid or softmax)
-    assert (G[L] in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
-    if G[L] == 'sigmoid':
+    # activation function of the output layer must be either sigmoid or softmax
+    assert (G[L-1] in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
+    
+    # initializing the backpropagation
+    if G[L-1] == 'sigmoid':
         dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
-        grads["dA" + str(L - 1)], grads["dW" + str(L)], grads["db" + str(L)] \
-            = linear_activation_backward(dAL, caches[L - 1], G[L])
-    elif G[L] == 'softmax':
+        grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] \
+            = linear_activation_backward(dAL, caches[L-1], G[L-1])
+    elif G[L-1] == 'softmax':
         dZL = AL - Y
-        grads["dA" + str(L - 1)], grads["dW" + str(L)], grads["db" + str(L)] \
+        grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] \
             = linear_backward(dZL, caches[L-1][0])
 
     # loop from l=L-1 to l=1
     for layer in reversed(range(1, L)):
         grads["dA" + str(layer-1)], grads["dW" + str(layer)], grads["db" + str(layer)] \
-            = linear_activation_backward(grads["dA" + str(layer)], caches[layer-1], G[layer])
+            = linear_activation_backward(grads["dA" + str(layer)], caches[layer-1], G[layer-1])
 
     return grads
 
@@ -496,7 +481,6 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, print_
                 parameters, and activation functions) to be used for prediction
 
     """
-
     np.random.seed(SEED_VALUE)
 
     costs = []  # keep track of cost

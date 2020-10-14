@@ -3,6 +3,7 @@ BasicDNN (in development)
 Generic L-layer 'straight in Python' Deep Neural Network implementation using basic Python/numpy.
 
 * Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example and m is the number of training examples.
+* Output data is supposed to be stackex in a 1 by mamtrix, where m is the number of training examples.
 * Output layer can be either Sigmoid or Softmax classifier.
 * Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
 * Implemented weights initialization methods: zeros, random, He, Xavier.

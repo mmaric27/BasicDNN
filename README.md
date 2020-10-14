@@ -1,4 +1,4 @@
-BasicDNN
+BasicDNN (in development)
 
 Generic L-layer 'straight in Python' Deep Neural Network implementation using basic Python/numpy.
 

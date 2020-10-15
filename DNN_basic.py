@@ -1,10 +1,11 @@
 # Generic L-layer 'straight in Python' Deep Neural Network implementation using basic Python/numpy.
-#
-#Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example
+# #Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example
 # and m is the number of training examples.
-#Output layer can be either Sigmoid or Softmax classifier.
-#Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
-#Implemented weights initialization methods: zeros, random, He, Xavier.
+# Output data is supposed to be stacked in a 1 by m matrix, where m is the number of training examples.
+# Output layer can be either Sigmoid or Softmax classifier.
+# Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
+# Implemented weights initialization methods: zeros, random, He, Xavier.
+# Implemented regularization: L2, Dropout.
 #
 # usage example:    model = L_layer_model(trainX, trainY, MODEL, num_iterations=1500)
 #                   predictTrain = predict(trainX, model, trainY)
@@ -29,7 +30,7 @@ SEED_VALUE = 0
 MODEL = ()
 
 
-def initialize_model(n_x, model):
+def initialize_model(n_x, model, seed=0):
     """
     Initialize model, its weight matrix, bias vector and activation functions.
     
@@ -37,6 +38,7 @@ def initialize_model(n_x, model):
         n_x (integer): number of input features
         model (tuple): network layer definitions, each element in a tuple is a tuple containing number of units in a
                     layer, activation function and weights initialization method for a layer
+        seed (int): seed for RandomState
 
     Returns:
         M (list): network layer definitions, each element in a list is a list containing weight and bias parameters, and
@@ -44,6 +46,8 @@ def initialize_model(n_x, model):
 
     """
     M = []
+
+    np.random.seed(seed)
 
     for layer_id in range(len(model)):
         # initialization method
@@ -56,9 +60,9 @@ def initialize_model(n_x, model):
         if method == 'zeros':
             W = np.zeros((n, n_prev))
         elif method == 'xavier':
-            W = np.random.randn(n, n_prev) * np.sqrt(1 / n_prev)
+            W = np.random.randn(n, n_prev) * np.sqrt(1/n_prev)
         elif method == 'he':
-            W = np.random.randn(n, n_prev) * np.sqrt(2 / n_prev)
+            W = np.random.randn(n, n_prev) * np.sqrt(2/n_prev)
         else:
             W = np.random.randn(n, n_prev) * 0.01
 
@@ -85,7 +89,7 @@ def linear_forward(A, W, b):
     """
     Z = np.dot(W, A) + b
 
-    assert(Z.shape == (W.shape[0], A.shape[1]))
+    assert (Z.shape == (W.shape[0], A.shape[1]))
     
     return Z
 
@@ -103,7 +107,7 @@ def sigmoid(Z):
     """
     A = 1 / (1 + np.exp(-Z))
 
-    assert(A.shape == Z.shape)
+    assert (A.shape == Z.shape)
 
     return A
 
@@ -121,7 +125,7 @@ def relu(Z):
     """
     A = np.maximum(0, Z)
 
-    assert(A.shape == Z.shape)
+    assert (A.shape == Z.shape)
 
     return A
 
@@ -139,7 +143,7 @@ def lrelu(Z, alpha=0.01):
     """
     A = np.maximum(alpha * Z, Z)
 
-    assert(A.shape == Z.shape)
+    assert (A.shape == Z.shape)
 
     return A
 
@@ -155,9 +159,9 @@ def tanh(Z):
         A (ndarray): post-activation output of tanh(Z), same shape as Z
 
     """
-    A = (np.exp(Z) - np.exp(-Z)) / (np.exp(Z) + np.exp(-Z))
+    A = (np.exp(Z)-np.exp(-Z)) / (np.exp(Z)+np.exp(-Z))
 
-    assert(A.shape == Z.shape)
+    assert (A.shape == Z.shape)
 
     return A
 
@@ -176,7 +180,7 @@ def softmax(Z):
     Z_exp = np.exp(Z - np.max(Z))
     A = Z_exp / np.sum(Z_exp, axis=0)
 
-    assert(A.shape == Z.shape)
+    assert (A.shape == Z.shape)
 
     return A
 
@@ -212,13 +216,16 @@ def linear_activation_forward(A_prev, W, b, g):
     return A, ((A_prev, W, b), Z)
 
 
-def L_model_forward(X, M):
+def L_model_forward(X, M, keep_prob=(), seed=0):
     """
     Forward propagation for the layers in a network.
     
     Args:
         X (ndarray): data, array of shape input size (# of features) by number of examples
-        M (list): output of initialize_model()
+        M (list): output of initialize_model() containing weights and bias parameters and layer activation functions
+        keep_prob (tuple): tuple containing probabilities of keeping a neuron active during drop-out for each hidden
+                        layer, if empty considered 1 for all layers (keeping all neurons)
+        seed (int): seed for RandomState
 
     Returns:
         A (ndarray): last post-activation value (from the output layer, prediction probability)
@@ -226,21 +233,43 @@ def L_model_forward(X, M):
 
     """
     caches = []
-    A = X
+    dropouts = []
+
+    np.random.seed(seed)
+
+    if keep_prob == ():
+        # set probability of keeping neuron for hidden layers to 1 (keeping all neurons)
+        keep_prob = (1,) * (len(M)-1)
+    assert (len(keep_prob) == len(M)-1)
 
     # forward propagation for L layers and add "cache" to the "caches" list
+    A = X
     for layer in range(len(M)):
         A_prev = A
         W, b, g = M[layer]
         A, cache = linear_activation_forward(A_prev, W, b, g)
+
+        # drop-out
+        if layer == len(M)-1 or keep_prob[layer] == 1:
+            # if output layer or not usin dropout
+            D = np.ones((A.shape[0], A.shape[1]))
+        else:
+            D = np.random.rand(A.shape[0], A.shape[1])
+            D = (D < keep_prob[layer]).astype(int)
+            # shut down some neurons
+            A = np.multiply(A, D)
+            # scale the value of neurons that haven't been shut down
+            A = A / keep_prob[layer]
+        dropouts.append((D, keep_prob[layer]))
+
         caches.append(cache)
 
-    assert(A.shape == (1, X.shape[1]))
+    assert (A.shape == (1, X.shape[1]))
     
-    return A, caches
+    return A, caches, dropouts
 
 
-def compute_cost(AL, Y, g):
+def compute_cost(AL, Y, M, lambd=0):
     """
     Calculates the cost.
 
@@ -248,36 +277,50 @@ def compute_cost(AL, Y, g):
         AL (ndarray): probability vector corresponding to "label" predictions (activations of last layer, returned by
                     L_model_forward(), shape 1 by number of examples
         Y (ndarray): true "label" vector (for example: containing 0 if non-cat, 1 if cat), shape 1 by number of examples
+        M (list): output of initialize_model() containing weights and bias parameters and layer activation functions
+        lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
 
     Returns:
-    :cost: cross-entropy cost
+        cost (ndarray): cross-entropy cost
     
     """
     cost = None
+    # number of training examples
     m = Y.shape[1]
+    # activation function of the output layer in a network
+    g = M[-1][2]
 
     # only sigmoid or softmax
     assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ('sigmoid', 'softmax')])
 
     # compute loss from AL and Y
     if g == 'sigmoid':
-        cost = - np.sum(np.multiply(Y, np.log(AL)) + np.multiply((1 - Y), np.log(1 - AL))) / m
+        cost = - np.sum(np.multiply(Y, np.log(AL))+np.multiply((1-Y), np.log(1-AL))) / m
     elif g == 'softmax':
         cost = np.sum(-np.sum(np.multiply(Y, np.log(AL)), axis=0)) / m
 
+    if lambd != 0:
+        # variable to kepp sum of squared weights
+        w2_sum = 0
+        for layer in range(len(M)):
+            W, _, _ = M[layer]
+            w2_sum += np.sum(np.square(W))
+        cost += w2_sum * (lambd / (2 * m))
+
     cost = np.squeeze(cost)  # to make sure cost's shape is as expected
-    assert(cost.shape == ())
+    assert (cost.shape == ())
     
     return cost
 
 
-def linear_backward(dZ, cache):
+def linear_backward(dZ, cache, lambd=0):
     """
     Linear portion of backward propagation for a single layer (layer l).
 
     Args:
         dZ (ndarray): gradient of the cost with respect to the linear output (of current layer l)
         cache (tuple): coming from the forward propagation in the current layer
+        lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
 
     Returns:
         dA_prev (ndarray): gradient of the cost with respect to the activation (of the previous layer l-1), same shape
@@ -290,6 +333,8 @@ def linear_backward(dZ, cache):
     m = A_prev.shape[1]
 
     dW = np.dot(dZ, A_prev.T) / m
+    if lambd != 0:
+        dW = dW + (lambd / m * W)
     db = np.sum(dZ, axis=1, keepdims=True) / m
     dA_prev = np.dot(W.T, dZ)
 
@@ -312,8 +357,8 @@ def sigmoid_backward(dA, Z):
         dZ (ndarray): gradient of the cost function with respect to Z
     
     """
-    s = sigmoid(Z)
-    dZ = dA * s * (1 - s)
+    S = sigmoid(Z)
+    dZ = dA * S * (1 - S)
     
     assert (dZ.shape == Z.shape)
     
@@ -400,14 +445,14 @@ def linear_activation_backward(dA, cache, g):
     # non-implemented activation function (softmax has a different algorithm, presumably used only in output layer)
     assert (g in [f for f in ACTIVATION_FUNCTIONS if f != 'softmax'])
 
-    dZ = eval(g + '_backward')(Z)
+    dZ = eval(g+'_backward')(Z)
 
     dA_prev, dW, db = linear_backward(dZ, linear_cache)
 
     return dA_prev, dW, db
 
 
-def L_model_backward(AL, Y, caches, G):
+def L_model_backward(AL, Y, caches, dropouts, G):
     """
     Backward propagation for the model.
     
@@ -415,8 +460,8 @@ def L_model_backward(AL, Y, caches, G):
         AL (ndarray): probability vector, output of the forward propagation L_model_forward()
         Y (ndarray): true "label" vector (for example containing 0 if non-cat, 1 if cat)
         caches (list): list of caches (linear and activation) returned from the L_model_forward()
+        dropouts (list): list of dropouts used during forward propagation, returned from the L_model_forward()
         G (list): list of activation functions for the model
-
     Returns:
         grads (dict): a dictionary with the gradients
 
@@ -430,18 +475,24 @@ def L_model_backward(AL, Y, caches, G):
     
     # initializing the backpropagation
     if G[L-1] == 'sigmoid':
-        dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
-        grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] \
+        dAL = - (np.divide(Y, AL) - np.divide(1-Y, 1-AL))
+        grads["dA"+str(L-1)], grads["dW"+str(L)], grads["db"+str(L)] \
             = linear_activation_backward(dAL, caches[L-1], G[L-1])
     elif G[L-1] == 'softmax':
         dZL = AL - Y
-        grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] \
+        grads["dA"+str(L-1)], grads["dW"+str(L)], grads["db"+str(L)] \
             = linear_backward(dZL, caches[L-1][0])
 
     # loop from l=L-1 to l=1
     for layer in reversed(range(1, L)):
-        grads["dA" + str(layer-1)], grads["dW" + str(layer)], grads["db" + str(layer)] \
-            = linear_activation_backward(grads["dA" + str(layer)], caches[layer-1], G[layer-1])
+        # applying drop-out on the same neurons it was applied on during forward propagation
+        D, keep_prob = dropouts[layer-1]
+        if keep_prob != 1:
+            grads["dA"+str(layer)] = np.multiply(grads["dA"+str(layer)], D)
+            grads["dA"+str(layer)] = grads["dA"+str(layer)] / keep_prob
+
+        grads["dA"+str(layer-1)], grads["dW"+str(layer)], grads["db"+str(layer)] \
+            = linear_activation_backward(grads["dA"+str(layer)], caches[layer-1], G[layer-1])
 
     return grads
 
@@ -463,7 +514,7 @@ def update_model(M, grads, learning_rate):
         M[layer_id][1] = M[layer_id][1] - learning_rate * grads["db" + str(layer_id+1)]
 
 
-def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, print_cost=False):
+def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, lambd=0, keep_prob = (), print_cost=False):
     """
     A L-layer neural network.
 
@@ -474,6 +525,9 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, print_
                     function and weights initialization method for the layer)
         learning_rate (float): learning rate of the gradient descent update rule
         num_iterations (int): number of iterations of the optimization loop
+        lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
+        keep_prob (tuple): tuple containing probabilities of keeping a neuron active during drop-out for each hidden
+                        layer in a model, if empty considered 1 for all layers (keeping all neurons)
         print_cost (bool): if True, it prints the cost at every 100 steps
 
     Returns:
@@ -481,21 +535,23 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, print_
                 parameters, and activation functions) to be used for prediction
 
     """
-    np.random.seed(SEED_VALUE)
-
     costs = []  # keep track of cost
+    seed = SEED_VALUE
 
     # model initialization
-    M = initialize_model(X.shape[0], model)
+    M = initialize_model(X.shape[0], model, seed)
 
     # loop gradient descent
     for i in range(0, num_iterations):
+        # increasing SEED_VALUE to ensure different randomization of drop_out neurons in each iteration
+        seed += 1
+
         # forward propagation
-        AL, caches = L_model_forward(X, M)
+        AL, caches, dropouts = L_model_forward(X, M, keep_prob, seed)
         # compute cost
-        cost = compute_cost(AL, Y, M[-1][2])
+        cost = compute_cost(AL, Y, M, lambd)
         # backward propagation
-        grads = L_model_backward(AL, Y, caches, [activation for W, b, activation in M])
+        grads = L_model_backward(AL, Y, caches, dropouts, [activation for W, b, activation in M])
         # update model
         update_model(M, grads, learning_rate)
 
@@ -522,7 +578,7 @@ def predict(X, M, Y=None):
 
     """
     # forward propagation
-    probabilities, _ = L_model_forward(X, M)
+    probabilities, _, _ = L_model_forward(X, M)
 
     # activation function of the output layer
     g = M[-1][2]

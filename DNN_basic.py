@@ -5,15 +5,18 @@
 # Output layer can be either Sigmoid or Softmax classifier.
 # Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
 # Implemented weights initialization methods: zeros, random, He, Xavier.
-# Implemented regularization: L2, Dropout.
+# Implemented regularization (reducing overfitting) methods: L2, Dropout.
+# Implemented optimization methods: Mini-Batch Gradient Descent
 #
-# usage example:    model = L_layer_model(trainX, trainY, MODEL, num_iterations=1500)
+# usage example:    model, _ = L_layer_model(trainX, trainY, MODEL)
 #                   predictTrain = predict(trainX, model, trainY)
 #                   predictDev = predict(devX, model, devY)
 #                   predictTest = predict(testX, model, testY)
 
 # main package
 import numpy as np
+
+import math
 
 # currently implemented activation functions
 ACTIVATION_FUNCTIONS = ('sigmoid', 'relu', 'lrelu', 'tanh', 'softmax')
@@ -30,9 +33,27 @@ SEED_VALUE = 0
 MODEL = ()
 
 
+def one_hot_matrix(Y):
+    """
+    Creates a matrix where the i-th row corresponds to the ith class number and the jth column corresponds to the jth
+    training example. So if example j had a label i. Then entry (i,j) will be 1.
+
+    Args:
+        Y (ndarray): true "label" vector of shape (1, number of examples)
+
+    Returns:
+        one_hot (ndarray): one hot matrix
+        
+    """
+    one_hot = np.zeros((Y.size, Y.max() + 1))
+    one_hot[np.arange(Y.size), Y] = 1
+
+    return one_hot
+
+
 def initialize_model(n_x, model, seed=0):
     """
-    Initialize model, its weight matrix, bias vector and activation functions.
+    Initialize model, its weight matrix, bias vector, activation functions and gradients.
     
     Args:
         n_x (integer): number of input features
@@ -48,29 +69,74 @@ def initialize_model(n_x, model, seed=0):
     M = []
 
     np.random.seed(seed)
-
+    
     for layer_id in range(len(model)):
-        # initialization method
-        method = model[layer_id][2]
-        # number of units in a layer
-        n = model[layer_id][0]
+        nodes, g, method = model[layer_id]
         # number of units in a previous layer
         n_prev = model[layer_id-1][0] if layer_id > 0 else n_x
 
         if method == 'zeros':
-            W = np.zeros((n, n_prev))
+            W = np.zeros((nodes, n_prev))
         elif method == 'xavier':
-            W = np.random.randn(n, n_prev) * np.sqrt(1/n_prev)
+            W = np.random.randn(nodes, n_prev) * np.sqrt(1/n_prev)
         elif method == 'he':
-            W = np.random.randn(n, n_prev) * np.sqrt(2/n_prev)
+            W = np.random.randn(nodes, n_prev) * np.sqrt(2/n_prev)
         else:
-            W = np.random.randn(n, n_prev) * 0.01
+            W = np.random.randn(nodes, n_prev) * 0.01
 
-        b = np.zeros((n, 1))
+        b = np.zeros((nodes, 1))
 
-        M.append([W, b, model[layer_id][1]])
+        M.append([W, b, g])
 
     return M
+
+
+def mini_batches(X, Y, mini_batch_size=64, seed=0):
+    """
+    Creates a list of random minibatches from (X, Y)
+
+    Args:
+        X (ndarray): input data of shape (input size, number of examples)
+        Y (ndarray): true "label" vector of shape (1, number of examples)
+        mini_batch_size (int): size of the mini-batches, if 0 using the whole dataset (no Mini-Batch GD optimization)
+        seed (int): seed for RandomState
+
+    Returns:
+        batches (list): list of synchronous (mini_batch_X, mini_batch_Y)
+
+    """
+    batches = []
+
+    if mini_batch_size == 0:
+        batches.append((X, Y))
+    else:
+        np.random.seed(seed)
+        # number of training examples
+        m = X.shape[1]
+
+        # shuffle (X, Y)
+        permutation = list(np.random.permutation(m))
+        shuffled_X = X[:, permutation]
+        shuffled_Y = Y[:, permutation].reshape((1, m))
+
+        # number of mini batches of size mini_batch_size in your partitionning
+        complete_minibatches = math.floor(m / mini_batch_size)
+
+        # partition (shuffled_X, shuffled_Y), minus the end case
+        for k in range(0, complete_minibatches):
+            mini_batch_X = shuffled_X[:, mini_batch_size * k: mini_batch_size * (k + 1)]
+            mini_batch_Y = shuffled_Y[:, mini_batch_size * k: mini_batch_size * (k + 1)]
+
+            batches.append((mini_batch_X, mini_batch_Y))
+
+        # end case (last mini-batch < mini_batch_size)
+        if m % mini_batch_size != 0:
+            mini_batch_X = shuffled_X[:, mini_batch_size * complete_minibatches:]
+            mini_batch_Y = shuffled_Y[:, mini_batch_size * complete_minibatches:]
+
+            batches.append((mini_batch_X, mini_batch_Y))
+
+    return batches
 
 
 def linear_forward(A, W, b):
@@ -136,6 +202,7 @@ def lrelu(Z, alpha=0.01):
 
     Args:
         Z (ndarray): numpy array of any shape, output of the linear layer
+        alpha (float): leaky rely alpha value
 
     Returns:
         A (ndarray): post-activation output of lrelu(Z), same shape as Z
@@ -202,8 +269,6 @@ def linear_activation_forward(A_prev, W, b, g):
                                 the backward pass efficiently
 
     """
-    A, linear_cache, activation_cache = None, None, None
-
     # non-implemented activation function
     assert (g in ACTIVATION_FUNCTIONS)
 
@@ -251,7 +316,7 @@ def L_model_forward(X, M, keep_prob=(), seed=0):
 
         # drop-out
         if layer == len(M)-1 or keep_prob[layer] == 1:
-            # if output layer or not usin dropout
+            # if output layer or not using dropout
             D = np.ones((A.shape[0], A.shape[1]))
         else:
             D = np.random.rand(A.shape[0], A.shape[1])
@@ -281,12 +346,10 @@ def compute_cost(AL, Y, M, lambd=0):
         lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
 
     Returns:
-        cost (ndarray): cross-entropy cost
+        cost (float): cross-entropy cost
     
     """
     cost = None
-    # number of training examples
-    m = Y.shape[1]
     # activation function of the output layer in a network
     g = M[-1][2]
 
@@ -295,22 +358,21 @@ def compute_cost(AL, Y, M, lambd=0):
 
     # compute loss from AL and Y
     if g == 'sigmoid':
-        cost = - np.sum(np.multiply(Y, np.log(AL))+np.multiply((1-Y), np.log(1-AL))) / m
+        cost = np.sum(np.multiply(-np.log(AL), Y)+np.multiply(-np.log(1-AL), (1-Y)))
     elif g == 'softmax':
-        cost = np.sum(-np.sum(np.multiply(Y, np.log(AL)), axis=0)) / m
+        cost = np.sum(np.sum(np.multiply(-np.log(AL), one_hot_matrix(Y)), axis=0))
 
     if lambd != 0:
-        # variable to kepp sum of squared weights
+        # variable to keep sum of squared weights
         w2_sum = 0
         for layer in range(len(M)):
             W, _, _ = M[layer]
             w2_sum += np.sum(np.square(W))
-        cost += w2_sum * (lambd / (2 * m))
+        cost += w2_sum * (lambd / 2)
 
-    cost = np.squeeze(cost)  # to make sure cost's shape is as expected
-    assert (cost.shape == ())
-    
-    return cost
+    cost = np.squeeze(cost)
+
+    return float(cost)
 
 
 def linear_backward(dZ, cache, lambd=0):
@@ -330,12 +392,13 @@ def linear_backward(dZ, cache, lambd=0):
     
     """
     A_prev, W, b = cache
-    m = A_prev.shape[1]
 
-    dW = np.dot(dZ, A_prev.T) / m
+    dW = np.dot(dZ, A_prev.T)
+       
     if lambd != 0:
-        dW = dW + (lambd / m * W)
-    db = np.sum(dZ, axis=1, keepdims=True) / m
+        dW = dW + (lambd / A_prev.shape[1] * W)
+        
+    db = np.sum(dZ, axis=1, keepdims=True)
     dA_prev = np.dot(W.T, dZ)
 
     assert (dA_prev.shape == A_prev.shape)
@@ -392,6 +455,7 @@ def lrelu_backward(dA, Z, alpha=0.01):
     Args:
         dA (ndarray): post-activation gradient, numpy array of any shape
         Z (ndarray): pre-activation parameter stored in cache during forward propagation
+        alpha (float): slope of the activation function at x < 0
 
     Returns:
         dZ (ndarray): gradient of the cost function with respect to Z
@@ -423,7 +487,7 @@ def tanh_backward(dA, Z):
     return dZ
 
 
-def linear_activation_backward(dA, cache, g):
+def linear_activation_backward(dA, cache, g, lambd=0):
     """
     Backward propagation for the LINEAR->ACTIVATION layer.
     
@@ -431,28 +495,28 @@ def linear_activation_backward(dA, cache, g):
         dA (ndarray): post-activation gradient for current layer l
         cache (tuple): (linear_cache, activation_cache) stored for computing backward propagation efficiently
         g (string): the activation to be used in this layer
-    
+        lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
+
     Returns:
-        dA_prev (ndarray): gradient of the cost with respect to the activation of the previous layer, same shape as A_prev
+        dA_prev (ndarray): gradient of the cost with respect to the activation of the previous layer, same shape as
+                        A_prev
         dW (ndarray): gradient of the cost with respect to W of current layer, same shape as W
         db (ndarray): gradient of the cost with respect to b of the current layer, same shape as b
     
     """
-    dZ, dA_prev, dW, db = None, None, None, None
-
     linear_cache, Z = cache
     
     # non-implemented activation function (softmax has a different algorithm, presumably used only in output layer)
     assert (g in [f for f in ACTIVATION_FUNCTIONS if f != 'softmax'])
 
-    dZ = eval(g+'_backward')(Z)
+    dZ = eval(g+'_backward')(dA, Z)
 
-    dA_prev, dW, db = linear_backward(dZ, linear_cache)
+    dA_prev, dW, db = linear_backward(dZ, linear_cache, lambd)
 
     return dA_prev, dW, db
 
 
-def L_model_backward(AL, Y, caches, dropouts, G):
+def L_model_backward(AL, Y, caches, dropouts, G, lambd=0):
     """
     Backward propagation for the model.
     
@@ -462,37 +526,41 @@ def L_model_backward(AL, Y, caches, dropouts, G):
         caches (list): list of caches (linear and activation) returned from the L_model_forward()
         dropouts (list): list of dropouts used during forward propagation, returned from the L_model_forward()
         G (list): list of activation functions for the model
+        lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
+
     Returns:
         grads (dict): a dictionary with the gradients
 
     """
-    grads = {}
-    Y = Y.reshape(AL.shape)
     L = len(caches)  # the number of layers in the network
+
+    # initialize grads with empty lists for each layer, so we can go backward filling it
+    grads = []
+    for layer in range(L+1):
+        grads.append([])
 
     # activation function of the output layer must be either sigmoid or softmax
     assert (G[L-1] in [f for f in ACTIVATION_FUNCTIONS if f in ['sigmoid', 'softmax']])
     
     # initializing the backpropagation
-    if G[L-1] == 'sigmoid':
-        dAL = - (np.divide(Y, AL) - np.divide(1-Y, 1-AL))
-        grads["dA"+str(L-1)], grads["dW"+str(L)], grads["db"+str(L)] \
-            = linear_activation_backward(dAL, caches[L-1], G[L-1])
-    elif G[L-1] == 'softmax':
-        dZL = AL - Y
-        grads["dA"+str(L-1)], grads["dW"+str(L)], grads["db"+str(L)] \
-            = linear_backward(dZL, caches[L-1][0])
+    dZL = 1./Y.shape[1] * (AL - (one_hot_matrix(Y) if G[L-1] == 'softmax' else Y))
+    dA_prev, dW, db = linear_backward(dZL, caches[L-1][0], lambd)
+    grads[L] = [None, dW, db]
+    grads[L-1] = dA_prev
 
     # loop from l=L-1 to l=1
     for layer in reversed(range(1, L)):
+        dA = grads[layer]
         # applying drop-out on the same neurons it was applied on during forward propagation
         D, keep_prob = dropouts[layer-1]
         if keep_prob != 1:
-            grads["dA"+str(layer)] = np.multiply(grads["dA"+str(layer)], D)
-            grads["dA"+str(layer)] = grads["dA"+str(layer)] / keep_prob
+            dA = np.multiply(dA, D)
+            dA = dA / keep_prob
 
-        grads["dA"+str(layer-1)], grads["dW"+str(layer)], grads["db"+str(layer)] \
-            = linear_activation_backward(grads["dA"+str(layer)], caches[layer-1], G[layer-1])
+        dA_prev, dW, db = linear_activation_backward(dA, caches[layer-1], G[layer-1], lambd)
+        
+        grads[layer] = [dA, dW, db]
+        grads[layer-1] = dA_prev
 
     return grads
 
@@ -510,21 +578,27 @@ def update_model(M, grads, learning_rate):
     L = len(M)  # number of layers in the neural network
 
     for layer_id in range(L):
-        M[layer_id][0] = M[layer_id][0] - learning_rate * grads["dW" + str(layer_id+1)]
-        M[layer_id][1] = M[layer_id][1] - learning_rate * grads["db" + str(layer_id+1)]
+        W, b, g = M[layer_id]
+        _, dW, db = grads[layer_id+1]
+        W = W - learning_rate * dW
+        b = b - learning_rate * db
+        M[layer_id] = [W, b, g]
 
 
-def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, lambd=0, keep_prob = (), print_cost=False):
+def L_layer_model(X, Y, model, learning_rate=0.0075, num_epochs=10000, mini_batch_size=0, lambd=0, keep_prob=(),
+                  print_cost=False):
     """
     A L-layer neural network.
 
     Args:
         X (ndarray): data, numpy array of shape n_x (number of features) by m (number of examples)
-        Y (ndarray): true "label" vector (for example containing 0 if cat, 1 if non-cat) of shape 1 by number of examples
-        model (tuple): tuple containing model definitions (each element is a tuple containing number of units, activation
-                    function and weights initialization method for the layer)
+        Y (ndarray): true "label" vector (for example containing 0 if cat, 1 if non-cat) of shape 1 by number of
+                    examples
+        model (tuple): tuple containing model definitions (each element is a tuple containing number of units,
+                    activation function and weights initialization method for the layer)
         learning_rate (float): learning rate of the gradient descent update rule
-        num_iterations (int): number of iterations of the optimization loop
+        num_epochs (int): number of epochs (iterations of the optimization loop)
+        mini_batch_size (int): the size of a mini batch, if 0 using whole dataset (no Mini-Batch GD optimization)
         lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
         keep_prob (tuple): tuple containing probabilities of keeping a neuron active during drop-out for each hidden
                         layer in a model, if empty considered 1 for all layers (keeping all neurons)
@@ -533,34 +607,52 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_iterations=3000, lambd=
     Returns:
         M (list): list defining the model (each element representing a layer with its learned weights and bias
                 parameters, and activation functions) to be used for prediction
+        costs (list): list of costs for every 100 epochs
 
     """
+    # there should be the same number of examples in X and Y
+    assert(X.shape[1] == Y.shape[1])
+
     costs = []  # keep track of cost
     seed = SEED_VALUE
 
     # model initialization
     M = initialize_model(X.shape[0], model, seed)
+    # there should be the same number of output values (nodes) in output layer of the model and classes in true "label"
+    # vector
+    assert (M[-1][0].shape[0] == Y.max() + (1 if M[-1][2] == 'softmax' else 0))
 
     # loop gradient descent
-    for i in range(0, num_iterations):
-        # increasing SEED_VALUE to ensure different randomization of drop_out neurons in each iteration
+    for i in range(0, num_epochs):
+        # increasing SEED_VALUE to reshuffle the dataset into mini batches differently after each epoch and to ensure
+        # different randomization of dropout neurons in each epoch, if using dropout regularization
         seed += 1
+        # define random minibatches
+        minibatches = mini_batches(X, Y, mini_batch_size, seed)
+        # keep track of total cost for all mini batches
+        cost = 0
 
-        # forward propagation
-        AL, caches, dropouts = L_model_forward(X, M, keep_prob, seed)
-        # compute cost
-        cost = compute_cost(AL, Y, M, lambd)
-        # backward propagation
-        grads = L_model_backward(AL, Y, caches, dropouts, [activation for W, b, activation in M])
-        # update model
-        update_model(M, grads, learning_rate)
+        for minibatch_X, minibatch_Y in minibatches:
+            # forward propagation
+            AL, caches, dropouts = L_model_forward(minibatch_X, M, keep_prob, seed)
+            # compute cost
+            cost += compute_cost(AL, minibatch_Y, M, lambd)
+            # backward propagation
+            grads = L_model_backward(AL, minibatch_Y, caches, dropouts, [activation for W, b, activation in M], lambd)
+            # update model
+            update_model(M, grads, learning_rate)
 
-        # print the cost every 100 training example
+        # calculate the cost for the whole set (divide the sum with total number of training examples in the dataset)
+        cost /= X.shape[1]
+
+        # print the cost every 1000 epoch
+        if print_cost and i % 1000 == 0:
+            print("Cost after epoch %i: %f" % (i, cost))
+        # track cost for every 100 epoch
         if print_cost and i % 100 == 0:
-            print("Cost after iteration %i: %f" % (i, float(cost)))
             costs.append(cost)
 
-    return M
+    return M, costs
 
 
 def predict(X, M, Y=None):
@@ -568,13 +660,14 @@ def predict(X, M, Y=None):
     Function used to predict the results of a L-layer neural network.
 
     Args:
-        X (ndarray): data set of examples to label, numpy array of shape n_x (number of features) by m (number of examples)
+        X (ndarray): data set of examples to label, numpy array of shape n_x (number of features) by m (number of
+                    examples)
         M (list): definition of the trained model, returned by L_layer_model()
         Y (ndarray): if given, true "label" vector of shape 1 by number of examples to print the accuracy
 
     Returns:
-        P (ndarray): predictions for the given dataset X, shape 1 for sigmoid activated output layer or number of classes
-                    for softmax classifier by number of examples
+        P (ndarray): predictions for the given dataset X, shape 1 for sigmoid activated output layer or number of
+                    classes for softmax classifier by number of examples
 
     """
     # forward propagation

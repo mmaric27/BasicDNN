@@ -5,23 +5,23 @@
 # Output layer can be either Sigmoid or Softmax classifier.
 # Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
 # Implemented weights initialization methods: zeros, random, He, Xavier.
-# Implemented regularization (reducing overfitting) methods: L2, Dropout.
-# Implemented optimization methods: Mini-Batch Gradient Descent
+# Implemented regularization methods: L2, Dropout.
+# Implemented optimization methods: Mini-Batch Gradient Descent, Momentum, Adam
 #
-# usage example:    model, _ = L_layer_model(trainX, trainY, MODEL)
-#                   predictTrain = predict(trainX, model, trainY)
-#                   predictDev = predict(devX, model, devY)
-#                   predictTest = predict(testX, model, testY)
+# usage example:    parameters, _ = L_layer_model(trainX, trainY, MODEL)
+#                   predictTrain = predict(trainX, parameters, trainY)
+#                   predictDev = predict(devX, parameters, devY)
+#                   predictTest = predict(testX, parameters, testY)
 
 # main package
 import numpy as np
-
-import math
 
 # currently implemented activation functions
 ACTIVATION_FUNCTIONS = ('sigmoid', 'relu', 'lrelu', 'tanh', 'softmax')
 # currently implemented wights initializations
 INITIALIZATIONS = ('zeros', 'random', 'xavier', 'he')
+# currently implemented optimization methods
+OPTIMIZATIONS = ('gd', 'momentum', 'adam')
 
 # seed global variable
 SEED_VALUE = 0
@@ -51,7 +51,7 @@ def one_hot_matrix(Y):
     return one_hot
 
 
-def initialize_model(n_x, model, seed=0):
+def initialize_model(n_x, model, optimizer='gd', seed=0):
     """
     Initialize model, its weight matrix, bias vector, activation functions and gradients.
     
@@ -59,14 +59,19 @@ def initialize_model(n_x, model, seed=0):
         n_x (integer): number of input features
         model (tuple): network layer definitions, each element in a tuple is a tuple containing number of units in a
                     layer, activation function and weights initialization method for a layer
+        optimizer (string): parameter optimization method when using mini-batches
         seed (int): seed for RandomState
 
     Returns:
-        M (list): network layer definitions, each element in a list is a list containing weight and bias parameters, and
-                activation function for a layer
+        parameters (list): network layer parameters and activation function
+        optimizations (list): list containing parameters for momentum or adam optimization methods, empty if none used
 
     """
-    M = []
+    # unimplemented optimization method
+    assert (optimizer in OPTIMIZATIONS)
+
+    parameters = []
+    optimizations = []
 
     np.random.seed(seed)
     
@@ -86,9 +91,18 @@ def initialize_model(n_x, model, seed=0):
 
         b = np.zeros((nodes, 1))
 
-        M.append([W, b, g])
+        parameters.append([W, b, g])
 
-    return M
+        if optimizer != 'gd':
+            v_dW = np.zeros((W.shape[0], W.shape[1]))
+            v_db = np.zeros((b.shape[0], b.shape[1]))
+            # RMSprop part of Adam
+            s_dW = np.zeros((W.shape[0], W.shape[1]))
+            s_db = np.zeros((b.shape[0], b.shape[1]))
+
+            optimizations.append([v_dW, v_db, s_dW, s_db])
+
+    return parameters, optimizations
 
 
 def mini_batches(X, Y, mini_batch_size=64, seed=0):
@@ -119,8 +133,8 @@ def mini_batches(X, Y, mini_batch_size=64, seed=0):
         shuffled_X = X[:, permutation]
         shuffled_Y = Y[:, permutation].reshape((1, m))
 
-        # number of mini batches of size mini_batch_size in your partitionning
-        complete_minibatches = math.floor(m / mini_batch_size)
+        # number of mini batches of size mini_batch_size in chosen partitioning
+        complete_minibatches = int((m / mini_batch_size) // 1)
 
         # partition (shuffled_X, shuffled_Y), minus the end case
         for k in range(0, complete_minibatches):
@@ -281,13 +295,13 @@ def linear_activation_forward(A_prev, W, b, g):
     return A, ((A_prev, W, b), Z)
 
 
-def L_model_forward(X, M, keep_prob=(), seed=0):
+def L_model_forward(X, parameters, keep_prob=(), seed=0):
     """
     Forward propagation for the layers in a network.
     
     Args:
         X (ndarray): data, array of shape input size (# of features) by number of examples
-        M (list): output of initialize_model() containing weights and bias parameters and layer activation functions
+        parameters (list): output of initialize_model() containing weights and bias parameters and layer activation functions
         keep_prob (tuple): tuple containing probabilities of keeping a neuron active during drop-out for each hidden
                         layer, if empty considered 1 for all layers (keeping all neurons)
         seed (int): seed for RandomState
@@ -295,6 +309,7 @@ def L_model_forward(X, M, keep_prob=(), seed=0):
     Returns:
         A (ndarray): last post-activation value (from the output layer, prediction probability)
         caches (list): list of caches containing every cache of linear_activation_forward()
+        dropouts (list): list of dropouts and keep probabilities used during forward propagation for each layer
 
     """
     caches = []
@@ -304,18 +319,18 @@ def L_model_forward(X, M, keep_prob=(), seed=0):
 
     if keep_prob == ():
         # set probability of keeping neuron for hidden layers to 1 (keeping all neurons)
-        keep_prob = (1,) * (len(M)-1)
-    assert (len(keep_prob) == len(M)-1)
+        keep_prob = (1,) * (len(parameters)-1)
+    assert (len(keep_prob) == len(parameters)-1)
 
     # forward propagation for L layers and add "cache" to the "caches" list
     A = X
-    for layer in range(len(M)):
+    for layer in range(len(parameters)):
         A_prev = A
-        W, b, g = M[layer]
+        W, b, g = parameters[layer]
         A, cache = linear_activation_forward(A_prev, W, b, g)
 
         # drop-out
-        if layer == len(M)-1 or keep_prob[layer] == 1:
+        if layer == len(parameters)-1 or keep_prob[layer] == 1:
             # if output layer or not using dropout
             D = np.ones((A.shape[0], A.shape[1]))
         else:
@@ -334,7 +349,7 @@ def L_model_forward(X, M, keep_prob=(), seed=0):
     return A, caches, dropouts
 
 
-def compute_cost(AL, Y, M, lambd=0):
+def compute_cost(AL, Y, parameters, lambd=0):
     """
     Calculates the cost.
 
@@ -342,7 +357,8 @@ def compute_cost(AL, Y, M, lambd=0):
         AL (ndarray): probability vector corresponding to "label" predictions (activations of last layer, returned by
                     L_model_forward(), shape 1 by number of examples
         Y (ndarray): true "label" vector (for example: containing 0 if non-cat, 1 if cat), shape 1 by number of examples
-        M (list): output of initialize_model() containing weights and bias parameters and layer activation functions
+        parameters (list): output of initialize_model() containing weights and bias parameters and layer activation
+                        functions
         lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
 
     Returns:
@@ -351,7 +367,7 @@ def compute_cost(AL, Y, M, lambd=0):
     """
     cost = None
     # activation function of the output layer in a network
-    g = M[-1][2]
+    g = parameters[-1][2]
 
     # only sigmoid or softmax
     assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ('sigmoid', 'softmax')])
@@ -365,8 +381,8 @@ def compute_cost(AL, Y, M, lambd=0):
     if lambd != 0:
         # variable to keep sum of squared weights
         w2_sum = 0
-        for layer in range(len(M)):
-            W, _, _ = M[layer]
+        for layer in range(len(parameters)):
+            W, _, _ = parameters[layer]
             w2_sum += np.sum(np.square(W))
         cost += w2_sum * (lambd / 2)
 
@@ -529,7 +545,7 @@ def L_model_backward(AL, Y, caches, dropouts, G, lambd=0):
         lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
 
     Returns:
-        grads (dict): a dictionary with the gradients
+        grads (list): list with the gradients for each layer
 
     """
     L = len(caches)  # the number of layers in the network
@@ -565,28 +581,68 @@ def L_model_backward(AL, Y, caches, dropouts, G, lambd=0):
     return grads
 
 
-def update_model(M, grads, learning_rate):
+def update_model(parameters, grads, learning_rate, optimizations, beta=0.9, beta1=0.9, beta2=0.999,  epsilon=1e-8, t=0):
     """
     Update model parameters using gradient descent.
     
     Args:
-        M (list): list containing weights and bias parameters, and activation functions for all layers in a network
+        parameters (list): list containing weights and bias parameters, and activation functions for all layers in a network
         grads (dict): dictionary containing gradients, output of L_model_backward()
         learning_rate (float): model's learning rate
+        optimizations (list): list containing parameters for momentum or adam optimization methods, empty if none used
+        beta (float): momentum optimization hyperparameter
+        beta1 (float): adam optimization hyperparameter, exponential decay for the past gradients estimates
+        beta2 (float): exponential decay hyperparameter for the past squared gradients estimates, adam optimization
+                    hyperparameter
+        epsilon (float): adam optimization hyperparameter, preventing division by zero
+        t (int): bias correction parameter for adam optimization method
 
     """
-    L = len(M)  # number of layers in the neural network
+    L = len(parameters)  # number of layers in the neural network
 
     for layer_id in range(L):
-        W, b, g = M[layer_id]
+        W, b, g = parameters[layer_id]
         _, dW, db = grads[layer_id+1]
-        W = W - learning_rate * dW
-        b = b - learning_rate * db
-        M[layer_id] = [W, b, g]
+
+        # if optimizations list is empty we're using basic gradient descent and just updating parameters
+        if not optimizations:
+            W = W - learning_rate * dW
+            b = b - learning_rate * db
+        else:
+            v_dW, v_db, s_dW, s_db = optimizations[layer_id]
+            # if there is no RMSprop optimization part (s_dW is all zeros) we're using momentum optimizer
+            if not np.any(s_dW):
+                # compute velocities
+                v_dW = beta * v_dW + (1 - beta) * dW
+                v_db = beta * v_db + (1 - beta) * dW
+                # update parameters
+                W = W - learning_rate * v_dW
+                b = b - learning_rate * v_db
+            # adam optimization
+            else:
+                # moving average of the gradients
+                v_dW = beta1 * v_dW + (1 - beta1) * dW
+                v_db = beta1 * v_db + (1 - beta1) * db
+                # moving average of the squared gradients
+                s_dW = beta2 * s_dW + (1 - beta2) * np.square(dW)
+                s_db = beta2 * s_db + (1 - beta2) * np.square(db)
+                # compute bias-corrected first moment estimate
+                v_dW_corrected = v_dW / (1 - beta1**t)
+                v_db_corrected = v_db / (1 - beta1**t)
+                # compute bias-corrected second raw moment estimate
+                s_dW_corrected = s_dW / (1 - beta2**t)
+                s_db_corrected = s_db / (1 - beta2**t)
+                # update parameters
+                W = W - learning_rate * (v_dW_corrected / (np.sqrt(s_dW_corrected) + epsilon))
+                b = b - learning_rate * (v_db_corrected / (np.sqrt(s_db_corrected) + epsilon))
+
+            optimizations[layer_id] = [v_dW, v_db, s_dW, s_db]
+
+        parameters[layer_id] = [W, b, g]
 
 
-def L_layer_model(X, Y, model, learning_rate=0.0075, num_epochs=10000, mini_batch_size=0, lambd=0, keep_prob=(),
-                  print_cost=False):
+def L_layer_model(X, Y, model, learning_rate=0.0075, num_epochs=10000, lambd=0, keep_prob=(), mini_batch_size=0,
+                  optimizer='gd', beta=0.9, beta1=0.9, beta2=0.999, epsilon=1e-8, print_cost=False):
     """
     A L-layer neural network.
 
@@ -598,29 +654,38 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_epochs=10000, mini_batc
                     activation function and weights initialization method for the layer)
         learning_rate (float): learning rate of the gradient descent update rule
         num_epochs (int): number of epochs (iterations of the optimization loop)
-        mini_batch_size (int): the size of a mini batch, if 0 using whole dataset (no Mini-Batch GD optimization)
         lambd (float): L2 regularization hyperparameter, default 0 (no regularization)
         keep_prob (tuple): tuple containing probabilities of keeping a neuron active during drop-out for each hidden
                         layer in a model, if empty considered 1 for all layers (keeping all neurons)
+        mini_batch_size (int): the size of a mini batch, if 0 using whole dataset (no Mini-Batch GD optimization)
+        optimizer (string): parameter optimization method when using mini-batches
+        beta (float): momentum optimization hyperparameter
+        beta1 (float): adam optimization hyperparameter, exponential decay for the past gradients estimates
+        beta2 (float): exponential decay hyperparameter for the past squared gradients estimates, adam optimization
+                    hyperparameter
+        epsilon (float): adam optimization hyperparameter, preventing division by zero
         print_cost (bool): if True, it prints the cost at every 100 steps
 
     Returns:
-        M (list): list defining the model (each element representing a layer with its learned weights and bias
+        parameters (list): list defining the parameters (each element representing a layer with its learned weights and bias
                 parameters, and activation functions) to be used for prediction
         costs (list): list of costs for every 100 epochs
 
     """
     # there should be the same number of examples in X and Y
-    assert(X.shape[1] == Y.shape[1])
+    assert (X.shape[1] == Y.shape[1])
 
     costs = []  # keep track of cost
     seed = SEED_VALUE
 
     # model initialization
-    M = initialize_model(X.shape[0], model, seed)
+    parameters, optimizations = initialize_model(X.shape[0], model, optimizer, seed)
     # there should be the same number of output values (nodes) in output layer of the model and classes in true "label"
     # vector
-    assert (M[-1][0].shape[0] == Y.max() + (1 if M[-1][2] == 'softmax' else 0))
+    assert (parameters[-1][0].shape[0] == Y.max() + (1 if parameters[-1][2] == 'softmax' else 0))
+
+    # initialize bias correction parameter in case adam optimization is used
+    t = 0
 
     # loop gradient descent
     for i in range(0, num_epochs):
@@ -634,13 +699,13 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_epochs=10000, mini_batc
 
         for minibatch_X, minibatch_Y in minibatches:
             # forward propagation
-            AL, caches, dropouts = L_model_forward(minibatch_X, M, keep_prob, seed)
+            AL, caches, dropouts = L_model_forward(minibatch_X, parameters, keep_prob, seed)
             # compute cost
-            cost += compute_cost(AL, minibatch_Y, M, lambd)
+            cost += compute_cost(AL, minibatch_Y, parameters, lambd)
             # backward propagation
-            grads = L_model_backward(AL, minibatch_Y, caches, dropouts, [activation for W, b, activation in M], lambd)
+            grads = L_model_backward(AL, minibatch_Y, caches, dropouts, [activation for W, b, activation in parameters], lambd)
             # update model
-            update_model(M, grads, learning_rate)
+            update_model(parameters, grads, learning_rate, optimizations, beta, beta1, beta2,  epsilon, t)
 
         # calculate the cost for the whole set (divide the sum with total number of training examples in the dataset)
         cost /= X.shape[1]
@@ -652,17 +717,17 @@ def L_layer_model(X, Y, model, learning_rate=0.0075, num_epochs=10000, mini_batc
         if print_cost and i % 100 == 0:
             costs.append(cost)
 
-    return M, costs
+    return parameters, costs
 
 
-def predict(X, M, Y=None):
+def predict(X, parameters, Y=None):
     """
     Function used to predict the results of a L-layer neural network.
 
     Args:
         X (ndarray): data set of examples to label, numpy array of shape n_x (number of features) by m (number of
                     examples)
-        M (list): definition of the trained model, returned by L_layer_model()
+        parameters (list): definition of the trained model, returned by L_layer_model()
         Y (ndarray): if given, true "label" vector of shape 1 by number of examples to print the accuracy
 
     Returns:
@@ -671,10 +736,10 @@ def predict(X, M, Y=None):
 
     """
     # forward propagation
-    probabilities, _, _ = L_model_forward(X, M)
+    probabilities, _, _ = L_model_forward(X, parameters)
 
     # activation function of the output layer
-    g = M[-1][2]
+    g = parameters[-1][2]
     # only sigmoid and softmax implemented as activation function for the output layer
     assert (g in [f for f in ACTIVATION_FUNCTIONS if f in ('sigmoid', 'softmax')])
 

@@ -7,16 +7,16 @@ Generic L-layer 'straight in Python' Deep Neural Network implementation using ba
 * Output layer can be either Sigmoid or Softmax classifier.
 * Implemented activation functions: Sigmoid, ReLU, Leaky ReLU, Tanh, Softmax.
 * Implemented weights initialization methods: zeros, random, He, Xavier.
-* Implemented regularization (reducing overfitting) methods: L2, Dropout.
-* Implemented optimization methods: Mini-Batch Gradient Descent
+* Implemented regularization methods: L2, Dropout.
+* Implemented optimization methods: Mini-Batch Gradient Descent, Momentum, Adam
 
 * Usage example (4 layer model with 3 hidden layers with 20, 7, 5 units and relu activation function and He weights initialization, and output
 layer with one unit, sigmoid function and random initialization): 
 	- MODEL = ((20, 'relu', 'he'), (7, 'relu', 'he'), (5, 'relu', 'he'), (1, 'sigmoid', 'random'))
-	- model = L_layer_model(trainX, trainY, MODEL)
-	- predictTrain = predict(trainX, model, trainY)
-	- predictDev = predict(devX, model, devY)
-	- predictTest = predict(testX, model, testY) 
+	- parameters = L_layer_model(trainX, trainY, MODEL)
+	- predictTrain = predict(trainX, parameters, trainY)
+	- predictDev = predict(devX, parameters, devY)
+	- predictTest = predict(testX, parameters, testY) 
 
-* Other optimizations (Momentum, Adam) and batch normalization to be implemented.
+* Batch normalization to be implemented.
 

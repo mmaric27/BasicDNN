@@ -1,5 +1,3 @@
-##BasicDNN (in development)
-
 Generic L-layer 'straight in Python' Deep Neural Network implementation using basic Python/numpy.
 
 * Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example and m is the number of training examples.

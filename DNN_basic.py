@@ -1,4 +1,5 @@
-# Generic L-layer 'straight in Python' Deep Neural Network implementation using basic Python/numpy.
+# Generic L-layer 'straight in Python' fully connected Neural Network implementation using basic Python/numpy.
+# It can be used as final layer(s) in a deeper (for instance convolutional) neural network.
 # #Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example
 # and m is the number of training examples.
 # Output data is supposed to be stacked in a 1 by m matrix, where m is the number of training examples.

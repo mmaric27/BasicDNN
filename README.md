@@ -1,5 +1,4 @@
 Generic L-layer 'straight in Python' fully connected Neural Network implementation using numpy. 
-It can be used as final or a side branch layer(s) in a deeper (e.g., convolutional, inception) neural network.
 
 * Input data is supposed to be stacked in a matrix of n_x by m, where n_x is a number of input features for an example and m is the number of training examples.
 * Output data is supposed to be stacked in a 1 by m matrix, where m is the number of training examples.
@@ -18,4 +17,3 @@ layer with one unit, sigmoid function and random initialization):
 	- predictTest = predict(testX, parameters, testY) 
 
 * Batch normalization to be implemented.
-
